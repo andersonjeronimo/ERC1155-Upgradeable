@@ -1,0 +1,20 @@
+{
+  "name": "erc1155-upgradeable",
+  "version": "1.0.0",
+  "description": "Projeto utilizando ERC-1967 (Transparent Proxy Pattern) e ERC1155 (Multitoken) com OpenZeppelin",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx hardhat coverage",
+    "compile": "npx hardhat compile"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.10"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  }
+}
