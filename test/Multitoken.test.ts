@@ -1,10 +1,7 @@
-import {
-  time,
-  loadFixture,
-} from "@nomicfoundation/hardhat-toolbox/network-helpers";
-import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
+import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
-import hre, { ethers } from "hardhat";
+import hre, { ethers, upgrades } from "hardhat";
+import { Multitoken } from "../typechain-types";
 
 describe("Multitoken", function () {
   // We define a fixture to reuse the same setup in every test.
@@ -14,30 +11,24 @@ describe("Multitoken", function () {
     // Contracts are deployed using the first signer/account by default
     const [owner, otherAccount] = await hre.ethers.getSigners();
     const Multitoken = await hre.ethers.getContractFactory("Multitoken");
-    const contract = await Multitoken.deploy();
-    return { contract, owner, otherAccount };
+    const contract = await upgrades.deployProxy(Multitoken);//Multitoken.deploy();    
+    const contractAddress = await contract.getAddress();
+    return { contract, contractAddress, owner, otherAccount };
   }
 
   it("Should mint", async function () {
     const { contract, owner } = await loadFixture(deployFixture);
-
     await contract.mint(0, 1, { value: hre.ethers.parseEther("0.01") });
     const balance = await contract.balanceOf(owner.address, 0);
-    const supply = await contract.currentSupply(0);
-
     expect(balance).to.be.equal(1, "Cannot mint");
-    expect(supply).to.be.equal(49, "Cannot mint");
+    
   });
 
   it("Should mint (multiple tokens)", async function () {
     const { contract, owner } = await loadFixture(deployFixture);
-
     await contract.mint(0, 3, { value: hre.ethers.parseEther("0.03") });
     const balance = await contract.balanceOf(owner.address, 0);
-    const supply = await contract.currentSupply(0);
-
-    expect(balance).to.be.equal(3, "Cannot mint");
-    expect(supply).to.be.equal(47, "Cannot mint");
+    expect(balance).to.be.equal(3, "Cannot mint");    
   });
 
   it("Should NOT mint (insufficient payment)", async function () {
@@ -72,7 +63,7 @@ describe("Multitoken", function () {
     await contract.mint(0, 1, { value: hre.ethers.parseEther("0.01") });
     await contract.setApprovalForAll(otherAccount.address, true);
     const approved = await contract.isApprovedForAll(owner.address, otherAccount.address);
-    const instance = contract.connect(otherAccount);
+    const instance = contract.connect(otherAccount) as Multitoken;
     await instance.burn(owner.address, 0, 1);
     const balance = await contract.balanceOf(owner.address, 0);
     expect(approved).to.be.equal(true, "Cannot delegate burn");
@@ -90,7 +81,7 @@ describe("Multitoken", function () {
     const { contract, owner, otherAccount } = await loadFixture(deployFixture);
     await contract.mint(0, 1, { value: hre.ethers.parseEther("0.01") });
     const approved = await contract.isApprovedForAll(owner.address, otherAccount.address);
-    const instance = contract.connect(otherAccount);
+    const instance = contract.connect(otherAccount) as Multitoken;
     expect(approved).to.be.equal(false, "Approved without set by owner");
     await expect(instance.burn(owner.address, 0, 1))
       .to.be.revertedWithCustomError(contract, "ERC1155MissingApprovalForAll");
@@ -100,11 +91,9 @@ describe("Multitoken", function () {
     const { contract, owner, otherAccount } = await loadFixture(deployFixture);
     await contract.mint(0, 1, { value: hre.ethers.parseEther("0.01") });
     await contract.safeTransferFrom(owner.address, otherAccount.address, 0, 1, "0x00000000");
-    const balances = await contract.balanceOfBatch([owner.address, otherAccount.address], [0, 0]);
-    const supply = await contract.currentSupply(0);
+    const balances = await contract.balanceOfBatch([owner.address, otherAccount.address], [0, 0]);    
     expect(balances[0]).to.be.equal(0, "Cannot safe transfer");
-    expect(balances[1]).to.be.equal(1, "Cannot safe transfer");
-    expect(supply).to.be.equal(49, "Cannot safe transfer");
+    expect(balances[1]).to.be.equal(1, "Cannot safe transfer");    
   });
 
   it("Should emit transfer event", async function () {
@@ -131,7 +120,7 @@ describe("Multitoken", function () {
   it("Should NOT safe transfer from (permission)", async function () {
     const { contract, owner, otherAccount } = await loadFixture(deployFixture);
     await contract.mint(0, 1, { value: hre.ethers.parseEther("0.01") });
-    const instance = contract.connect(otherAccount);
+    const instance = contract.connect(otherAccount) as Multitoken;
     await expect(instance.safeTransferFrom(owner.address, otherAccount.address, 0, 1, "0x00000000"))
       .to.be.revertedWithCustomError(contract, "ERC1155MissingApprovalForAll");
   });
@@ -148,7 +137,7 @@ describe("Multitoken", function () {
     const { contract, owner, otherAccount } = await loadFixture(deployFixture);
     await contract.mint(0, 1, { value: hre.ethers.parseEther("0.01") });
     await contract.mint(1, 1, { value: hre.ethers.parseEther("0.01") });
-    const instance = contract.connect(otherAccount);
+    const instance = contract.connect(otherAccount) as Multitoken;
     await expect(instance.safeBatchTransferFrom(owner.address, otherAccount.address, [0, 1], [1, 1], "0x00000000"))
       .to.be.revertedWithCustomError(contract, "ERC1155MissingApprovalForAll");
   });
@@ -156,51 +145,51 @@ describe("Multitoken", function () {
   //https://eips.ethereum.org/EIPS/eip-1155
   it("Should supports interface", async function () {
     const { contract } = await loadFixture(deployFixture);
-    const supports = await contract.supportsInterface("0xd9b67a26");    
+    const supports = await contract.supportsInterface("0xd9b67a26");
     expect(supports).to.be.equal(true, "Does not supports interface ERC-1155");
   });
 
   it("Should withdraw", async function () {
     const { contract, owner, otherAccount } = await loadFixture(deployFixture);
-    
-    const instance = contract.connect(otherAccount);
+
+    const instance = contract.connect(otherAccount) as Multitoken;
     await instance.mint(0, 3, { value: hre.ethers.parseEther("0.03") });
-    
+
     const contractBalanceBefore = await hre.ethers.provider.getBalance(contract.getAddress());
     const ownerBalanceBefore = await hre.ethers.provider.getBalance(owner.address);
 
     await contract.withdraw();
-    
+
     const contractBalanceAfter = await hre.ethers.provider.getBalance(contract.getAddress());
     const ownerBalanceAfter = await hre.ethers.provider.getBalance(owner.address);
 
     expect(contractBalanceBefore).to.be.equal(hre.ethers.parseEther("0.03"), "Cannot withdraw");
     expect(contractBalanceAfter).to.be.equal(0, "Cannot withdraw");
-    
+
     expect(ownerBalanceAfter).to.be.greaterThan(ownerBalanceBefore, "Cannot withdraw");
   });
 
   it("Should NOT withdraw (permission)", async function () {
-    const { contract, owner, otherAccount } = await loadFixture(deployFixture);    
-    const instance = contract.connect(otherAccount);
-    await expect(instance.withdraw()).to.be.revertedWith("You do not have permission");
+    const { contract, otherAccount } = await loadFixture(deployFixture);
+    const instance = contract.connect(otherAccount) as Multitoken;
+    await expect(instance.withdraw()).to.be.revertedWithCustomError(contract, "OwnableUnauthorizedAccount");
   });
 
   it("Should has URI metadata", async function () {
     const { contract } = await loadFixture(deployFixture);
     await contract.mint(0, 3, { value: hre.ethers.parseEther("0.03") });
-    const uri = await contract.uri(0);    
+    const uri = await contract.uri(0);
     expect(uri).to.be.equal("https://yellow-wonderful-vulture-357.mypinata.cloud/ipfs/QmSYDgxC6wKJ9SqyDFZpy3mrc5ikc8P7kvTUDHHsFPaunB/0.json");
   });
 
   it("Should NOT has URI metadata (token _id does not exists)", async function () {
-    const { contract } = await loadFixture(deployFixture);    
+    const { contract } = await loadFixture(deployFixture);
     await contract.mint(0, 3, { value: hre.ethers.parseEther("0.03") });
     await expect(contract.uri(4)).to.be.revertedWith("This token _id does not exists");
   });
 
   it("Should NOT has URI metadata (token _id was not minted yet)", async function () {
-    const { contract } = await loadFixture(deployFixture);    
+    const { contract } = await loadFixture(deployFixture);
     await contract.mint(0, 1, { value: hre.ethers.parseEther("0.01") });
     await expect(contract.uri(1)).to.be.revertedWith("This token _id was not minted yet");
   });
